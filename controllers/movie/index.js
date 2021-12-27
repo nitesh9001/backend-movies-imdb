@@ -60,6 +60,7 @@ exports.list = async (req, res, next) => {
             // "genres.__v": 0,
             // "genres.status":0,
             "__v": 0,
+            "posterurl":0
           }
         }]);
 
