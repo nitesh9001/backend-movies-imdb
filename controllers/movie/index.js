@@ -5,13 +5,27 @@ const mongoose = require('mongoose');
 const multer=require('multer');
 const path = require('path');
 const fs = require('fs');
+const AWS = require("aws-sdk");
+const { v4: uuidv4 } = require("uuid");
 
-const storage = multer.diskStorage({
-    destination: "./uploads/",
-    filename: function(req, file, cb){
-       cb(null,"files-" + Date.now() + path.extname(file.originalname));
-    }
- });
+const s3 = new AWS.S3({
+  accessKeyId: process.env.AWSACCESSKEYID,
+  secretAccessKey: process.env.AWSSECERETKEY,
+});
+//s3
+const storage = multer.memoryStorage({
+  destination: function (req, file, callback) {
+    callback(null, "");
+  },
+});
+
+//local disk
+// const storage = multer.diskStorage({
+//     destination: "./uploads/",
+//     filename: function(req, file, cb){
+//        cb(null,"files-" + Date.now() + path.extname(file.originalname));
+//     }
+//  });
  
  const upload = multer({
     storage: storage,
@@ -60,6 +74,7 @@ exports.list = async (req, res, next) => {
             // "genres.__v": 0,
             // "genres.status":0,
             "__v": 0,
+            // "posterurl":0
           }
         }]);
 
@@ -77,55 +92,72 @@ exports.list = async (req, res, next) => {
 };
 
 exports.addMovie = async (req, res, next) => {
-     
     try{
-       upload(req, res, async () => {
-       const request = req.body;
-       const genreData = []
-       const genres = () => {
-         JSON.parse(req.body?.genres).map(element => {
-          genreData.push(mongoose.Types.ObjectId(element));
-       });
-          return genreData
-       }
+      upload(req, res, async () => {
+      const request = req.body;
+      const genreData = [];
       if(!req.file){
-          return res.status(200).json({ success: false, message: "Oops ! File is mendatory", error: "file path is not found" });
+        return res.status(200).json({ success: false, message: "Oops ! File is mendatory", error: "file path is not found" });
       }
-       console.log("Request file ---", req.file,JSON.parse(req.body?.genres));
+  
+      const genres = () => {
+        JSON.parse(req.body?.genres).map(element => {
+        genreData.push(mongoose.Types.ObjectId(element));
+      });
+        return genreData
+      }
+      const item = req.file;
+      let myFile = item.originalname.split(".");
+      const fileType = myFile[myFile.length - 1];       
+      const params = {
+        Bucket: process.env.AWS_BUCKET_NAME,
+        Key: `${uuidv4()}.${fileType}`,
+        Body: item.buffer,
+      };
 
-       const movie = await new Movie({
-            posterurl: {
-              data: fs.readFileSync(path.join(req.file.path)),
-              contentType : req.file?.mimetype
-            },
-            title: request.title,
-            desription: request.desription,
-            storyline: request.storyline,
-            director: request.director,
-            writer: request.writer,
-            releaseDate: request.releaseDate,
-            language: JSON.parse(request.language),
-            year: request.year,
-            duration: request.duration,
-            rating: request.rating,
-            genres: genres(),
-            stars: JSON.parse(request.stars),
-            status: JSON.parse(request.status),
-            creator: mongoose.Types.ObjectId(request.creator)
-       });
-       movie.save()
-      .then((data) => {
-          return res.status(200).json({
-            success: true,
-            data: data,
-            message: "Added sucessfully"
-          });
-        })
-        .catch((err) => {
-           return res.status(200).json({ success: false, message: "Oops ! Data not added", error: err });
+      s3.upload(params, async(error, data) => {
+      if (error) {
+        return res.status(200).json({
+          success: false,
+          error: error,
+          message: "Error in s3 bucket uploading "
         });
-      })
+      } else {
+          const movie = await new Movie({
+          posterurl: {
+            data: data?.Location, 
+            contentType : req.file?.mimetype
+          },
+          title: request.title,
+          desription: request.desription,
+          storyline: request.storyline,
+          director: request.director,
+          writer: request.writer,
+          releaseDate: request.releaseDate,
+          language: JSON.parse(request.language),
+          year: request.year,
+          duration: request.duration,
+          rating: request.rating,
+          genres: genres(),
+          stars: JSON.parse(request.stars),
+          status: JSON.parse(request.status),
+          creator: mongoose.Types.ObjectId(request.creator)
+      });
+      movie.save()
+    .then((data) => {
+        return res.status(200).json({
+          success: true,
+          data: data,
+          message: "Added sucessfully"
+        });
+    })
+    .catch((err) => {
+          return res.status(200).json({ success: false, message: "Oops ! Data not added", error: err });
+    });
     }
+   });
+  })
+  }
     catch (err) {
       return res.status(500).json({ success: false, message: "Something went wrong", error: err || null });
     }
@@ -143,26 +175,40 @@ exports.search = async (req, res, next) => {
        return res.status(500).json({ success: false, message: "Something went wrong", error: err || null });
     }
 };
-const authValidator =async (user_id, movie_id) => {
-  console.log(movie_id, user_id?.id)
-   const findMovie = await Movie.findById(movie_id)
+
+const authValidator = async (user_id, movie_id) => {
+  var data
+   await Movie.findById(movie_id)
    .then(res => {
-    const data = res?.creator?.toString() === user_id?.toString()
-    return data;
+     data = res?.creator?.toString() === user_id?.id?.toString()
+    console.log("auth validator",res?.creator?.toString(), user_id?.id?.toString(),data)
   })
+    return data;
 }
+
 exports.editMovie = async (req, res, next) => {
     
     const { movie_id } = req.params;
-    const user_id  = req.user?.id;
+    const user_id  = req.user;
     try{
         if( !movie_id ){
            return res.status(200).json({ success: false, message: "movie_id not found"});
         }
-       if(!authValidator(user_id, movie_id)){
+        
+        var isAuthBool ;
+        await Movie.findById(movie_id)
+        .then(res => {
+          isAuthBool = res?.creator?.toString() === user_id?.id?.toString()
+          console.log("auth validator",res?.creator?.toString(), user_id?.id?.toString())
+        });
+
+        console.log(isAuthBool)
+
+        if(!isAuthBool){
          return res.status(200).json({ success: false, message: "you are not authorised to change this data"});
-       }
-       upload(req, res, async () => {
+        }
+        else{
+        upload(req, res, async () => {
         const request = req.body;
         const genreData = []
         const genres = () => {
@@ -171,7 +217,6 @@ exports.editMovie = async (req, res, next) => {
         });
           return genreData
        }
-       console.log("Request file ---", req.file,JSON.parse(req.body?.genres));
        if(!req.file){
            const movies = await Movie.findByIdAndUpdate(
             movie_id,
@@ -195,11 +240,28 @@ exports.editMovie = async (req, res, next) => {
        );
         return res.status(200).json({ success: true, data: movies, message: "Update Succesfully" });
        }
-       const movies = await Movie.findByIdAndUpdate(movie_id,
+       const item = req.file;
+      let myFile = item.originalname.split(".");
+      const fileType = myFile[myFile.length - 1];       
+      const params = {
+        Bucket: process.env.AWS_BUCKET_NAME,
+        Key: `${uuidv4()}.${fileType}`,
+        Body: item.buffer,
+      };
+
+      s3.upload(params, async(error, data) => {
+      if (error) {
+        return res.status(200).json({
+          success: false,
+          error: error,
+          message: "Error in s3 bucket uploading "
+        });
+      } else {
+         await Movie.findByIdAndUpdate(movie_id,
             { $set: {
             posterurl: {
-              data: fs.readFileSync(path.join(req.file.path)),
-              contentType : req.file?.mimetype
+               data: data?.Location, 
+               contentType : req.file?.mimetype
             },
             desription: request.desription,
             storyline: request.storyline,
@@ -217,7 +279,7 @@ exports.editMovie = async (req, res, next) => {
               new: true,
               runValidators: true,
           }
-       )
+        )
         .then((data) => {
           return res.status(200).json({
             success: true,
@@ -228,8 +290,10 @@ exports.editMovie = async (req, res, next) => {
         .catch((err) => {
            return res.status(200).json({ success: false, message: "Oops ! Data not updated", error: err });
         });
-      })
-       
+      }
+     });
+    });
+  }     
     }
     catch (err) {
       return res.status(500).json({ success: false, message: "Something went wrong", error: err || null });
@@ -239,14 +303,24 @@ exports.editMovie = async (req, res, next) => {
 exports.deleteMovie = async (req, res, next) => {
     
     const { movie_id } = req.params;
-    const user_id  = req.user?.id;
+    const user_id  = req.user;
     try{
        if( !movie_id ){
            return res.status(200).json({ success: false, message: "movie_id not found"});
         }
-       if(!authValidator(user_id, movie_id)){
+        var isAuthBool ;
+        await Movie.findById(movie_id)
+        .then(res => {
+          isAuthBool = res?.creator?.toString() === user_id?.id?.toString()
+          console.log("auth validator",res?.creator?.toString(), user_id?.id?.toString())
+        });
+
+        console.log(isAuthBool)
+
+        if(!isAuthBool){
          return res.status(200).json({ success: false, message: "you are not authorised to change this data"});
-       }
+        }
+        else{
         const removeMovie = await Movie.remove({
         _id: movie_id,
        });
@@ -258,6 +332,7 @@ exports.deleteMovie = async (req, res, next) => {
           });
         }
       }
+    }
       catch (err) {
          return res.status(500).json({ success: false, message: "Something went wrong", error: err || null });
     }

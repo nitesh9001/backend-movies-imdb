@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 const MovieModel = new mongoose.Schema({
     posterurl: {
-      data: Buffer,
+      data: String,
       contentType: String
     },
     title: {

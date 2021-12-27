@@ -10,10 +10,9 @@ const auth = require('./routes/auth');
 const genre = require('./routes/genre');
 const movie = require('./routes/movie');
 
-
 const app = express();
 app.use(express.json());
-
+app.use(express.urlencoded());
 connectDB();
 app.use(cors());
 
@@ -25,5 +24,4 @@ app.use(express.static(path.join(__dirname,'./uploads/')));
 app.use("/api/v1/auth", auth);
 app.use("/api/v1/genre", genre);
 app.use("/api/v1/movie", movie);
-
 cluster(app);
