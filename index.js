@@ -26,6 +26,4 @@ app.use("/api/v1/auth", auth);
 app.use("/api/v1/genre", genre);
 app.use("/api/v1/movie", movie);
 
- app.listen(port,() => {
-    console.log(`listen server PID PORT - `, port);
-});
+cluster(app);
