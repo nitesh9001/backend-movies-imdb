@@ -10,6 +10,10 @@ const AdminModel = new mongoose.Schema({
       type: String,
       required: true,
     },
+    watchLater: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "movies",
+    }],
     status: {
       type: Boolean,
     },

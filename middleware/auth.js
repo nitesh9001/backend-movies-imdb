@@ -6,15 +6,15 @@ module.exports = async (req, res, next) => {
   const bearerHeader = req.header("authorization");
  
     try {
-       if (!bearerHeader)
+       if (!bearerHeader || bearerHeader === null || bearerHeader === "null"){
         return res
           .status(401)
           .json({ success: false, message: "No authorization token found, authorization denied" });
-
-      const decoded = jwt.verify(bearerHeader, process.env.JWTSCERET, async function(err, decoded) {
+       }
+      
+        const decoded = jwt.verify(bearerHeader, process.env.JWTSCERET, async function(err, decoded) {
           email = decoded.admin.email;
           req.user = decoded.admin;
-          console.log(decoded)
           const adminData = await AdminModel.findOne({ email: email });
           if (adminData) {
             return next();

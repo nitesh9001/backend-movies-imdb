@@ -27,14 +27,14 @@ const storage = multer.memoryStorage({
 //     }
 //  });
  
- const upload = multer({
-    storage: storage,
- }).single("file");
+const upload = multer({
+  storage: storage,
+}).single("file");
  
-
 exports.list = async (req, res, next) => {
     try {
         const { sort , id, type, search } = req.body;
+       
         var regex;
         if(search){
            regex = new RegExp(search, "i");

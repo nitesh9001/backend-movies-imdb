@@ -2,6 +2,7 @@ const Admin = require("../../Models/admin");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 var dotenv = require("dotenv").config();
+const mongoose = require('mongoose');
 
 exports.register = async (req, res, next) => {
     
@@ -111,6 +112,116 @@ exports.login = async (req, res, next) => {
             },
         });
      })
+    }
+    catch (err) {
+      return res.status(500).json({ success: false, message: "Something went wrong", error: err || null });
+    }
+};
+
+exports.addWtachlater = async (req, res, next) => {
+    
+    const { movie_id, remove } = req.body;
+    const { id } = req.user;
+
+    try{
+        if(!movie_id){
+            return res.status(200).json({ success: false, message: "movie_id not found", error:  null });
+        }
+        const admin = await Admin.findById(id);
+        if(admin){
+            var watchlaterArray = admin?.watchLater;
+            console.log(admin?.watchLater.includes(movie_id), remove );
+            if(admin?.watchLater.includes(movie_id) && !remove){
+                return res.status(200).json({ success: false, message: "Already added" });
+            }
+            if(admin?.watchLater.includes(movie_id) && remove){
+                const data = watchlaterArray.filter(d => d.toString() !== movie_id)
+                console.log("dd",data);
+                admin.watchLater = data;
+            }else{
+               watchlaterArray.push(movie_id);
+            }
+            console.log("final",watchlaterArray);
+            admin.save().then(response => {
+            return res.status(200).json({ success: true, data: response, message: remove ? "Removed from watch later" : "Added to watch later" });
+        }).catch((err) => {
+            return res.status(200).json({ success: false, message: "Failed to add watch later", error: err || null });
+        });
+        }
+    }
+    catch (err) {
+      return res.status(500).json({ success: false, message: "Something went wrong", error: err || null });
+    }
+};
+
+exports.getWtachlater = async (req, res, next) => {
+
+    const { id } = req.user;
+
+    try{
+        const admin = await Admin.aggregate([
+         { $match : { _id : mongoose.Types.ObjectId(id)}},
+         { $lookup: {
+            from: "movies",
+            localField: "watchLater",
+            foreignField: "_id",
+            as: "watchLater"
+          }
+         },
+         { $unwind: {
+            path: "$watchLater",
+            preserveNullAndEmptyArrays: false
+           }
+        },
+        { $lookup: {
+            from: "admins",
+            localField: "watchLater.creator",
+            foreignField: "_id",
+            as: "watchLater.creator"
+          }
+        },
+        { $lookup: {
+            from: "genres",
+            localField: "watchLater.genres",
+            foreignField: "_id",
+            as: "watchLater.genres"
+          }
+        },
+        //  { $unwind: {
+        //     path: "$watchLater.creator",
+        //     preserveNullAndEmptyArrays: false
+        //    }
+        // },
+        { $project: {
+            email:0,
+            _id:0,
+            name:0,
+            password: 0,
+            status:0,
+            createdAt:0,
+            updatedAt:0,
+            "watchLater.__v":0,
+            "watchLater.creator.password": 0,
+            "watchLater.creator.createdAt": 0,
+            "watchLater.creator.updatedAt": 0,
+            "watchLater.creator.__v": 0,
+            "watchLater.creator.status":0,
+            "watchLater.creator.watchLater":0,
+            "watchLater.genres.createdAt": 0,
+            "watchLater.genres.updatedAt": 0,
+            "watchLater.genres.__v": 0,
+            "watchLater.genres.status":0,
+             __v:0
+         }}
+        ]).then(response => {
+            var dataResponse=[];
+            response.forEach(d => {
+                dataResponse.push(d?.watchLater);
+            })
+            return res.status(200).json({ success: true, data: dataResponse });
+        }).catch((err) => {
+            return res.status(200).json({ success: false, message: "Failed to add watch later", error: err || null });
+        });
     }
     catch (err) {
       return res.status(500).json({ success: false, message: "Something went wrong", error: err || null });
