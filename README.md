@@ -1,5 +1,6 @@
 # backend-movies-imdb
 
+https://movie-imdb-fynd.herokuapp.com/
 
 This project was bootstrapped with express and nodejs
 
@@ -15,7 +16,7 @@ Open [http://localhost:8080](http://localhost:8080) to view it in your browser/ 
 
 ### Deployment
 
-This is deployed on heroku auto deploy with github
+This is deployed on heroku auto deploy with github endpoint -- https://movie-imdb-fynd.herokuapp.com/
 
 ### Functionlity
 
